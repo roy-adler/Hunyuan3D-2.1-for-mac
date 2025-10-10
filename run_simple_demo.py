@@ -40,9 +40,9 @@ from PIL import Image
 PRESETS = {
     'minimum': {
         'num_inference_steps': 15,      # Minimum steps
-        'octree_resolution': 128,       # Lower resolution mesh
-        'guidance_scale': 3.0,          # Less guidance = faster
-        'num_chunks': 2500,             # Fewer chunks = less memory
+        'octree_resolution': 192,       # Lower resolution mesh
+        'guidance_scale': 2.0,          # Less guidance = faster
+        'num_chunks': 3000,             # Fewer chunks = less memory
     },
     'fast': {
         'num_inference_steps': 20,      # Much faster, decent quality
