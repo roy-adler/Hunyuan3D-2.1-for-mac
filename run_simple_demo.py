@@ -7,6 +7,21 @@ Generates 3D models from images without the Gradio interface
 import sys
 import os
 
+# ============================================================================
+# PERFORMANCE SETTINGS - Adjust these for speed vs quality tradeoff
+# ============================================================================
+# Preset options: 'fast', 'balanced', 'quality'
+QUALITY_PRESET = 'minimum'  # Change this to 'balanced' or 'quality' for better results
+
+# Manual settings (uncomment to override preset):
+# num_inference_steps = 20      # Min: 15, Fast: 20, Balanced: 35, Quality: 50+
+# octree_resolution = 256       # Default: 384, Fast: 256, Quality: 512
+# guidance_scale = 3.0          # Default: 5.0, Fast: 3.0, Quality: 7.0
+# num_chunks = 4000             # Default: 8000, Fast: 4000, Quality: 16000
+#
+# WARNING: num_inference_steps below 15 will likely fail!
+# ============================================================================
+
 # Enable MPS fallback for unsupported operations (must be set before importing torch)
 os.environ['PYTORCH_ENABLE_MPS_FALLBACK'] = '1'
 
@@ -21,9 +36,69 @@ import torch
 from hy3dshape.pipelines import Hunyuan3DDiTFlowMatchingPipeline
 from PIL import Image
 
+# Define quality presets
+PRESETS = {
+    'minimum': {
+        'num_inference_steps': 15,      # Minimum steps
+        'octree_resolution': 128,       # Lower resolution mesh
+        'guidance_scale': 3.0,          # Less guidance = faster
+        'num_chunks': 2500,             # Fewer chunks = less memory
+    },
+    'fast': {
+        'num_inference_steps': 20,      # Much faster, decent quality
+        'octree_resolution': 256,       # Lower resolution mesh
+        'guidance_scale': 3.0,          # Less guidance = faster
+        'num_chunks': 4000,             # Fewer chunks = less memory
+    },
+    'balanced': {
+        'num_inference_steps': 35,      # Good balance
+        'octree_resolution': 320,       # Medium resolution
+        'guidance_scale': 4.0,          # Moderate guidance
+        'num_chunks': 6000,             # Moderate chunks
+    },
+    'quality': {
+        'num_inference_steps': 50,      # Default quality
+        'octree_resolution': 384,       # High resolution
+        'guidance_scale': 5.0,          # Default guidance
+        'num_chunks': 8000,             # Default chunks
+    }
+}
+
+# Apply preset or use custom settings
+if QUALITY_PRESET in PRESETS:
+    settings = PRESETS[QUALITY_PRESET]
+else:
+    print(f"Warning: Unknown preset '{QUALITY_PRESET}', using 'balanced'")
+    settings = PRESETS['balanced']
+
+# Override with manual settings if defined
+if 'num_inference_steps' in dir():
+    settings['num_inference_steps'] = num_inference_steps
+if 'octree_resolution' in dir():
+    settings['octree_resolution'] = octree_resolution
+if 'guidance_scale' in dir():
+    settings['guidance_scale'] = guidance_scale
+if 'num_chunks' in dir():
+    settings['num_chunks'] = num_chunks
+
+# Validate settings
+MIN_STEPS = 15
+if settings['num_inference_steps'] < MIN_STEPS:
+    print(f"❌ ERROR: num_inference_steps ({settings['num_inference_steps']}) is too low!")
+    print(f"   Minimum recommended: {MIN_STEPS} steps")
+    print(f"   The model will likely fail to generate a valid mesh.")
+    print()
+    import sys
+    sys.exit(1)
+
 print("="*70)
 print("Hunyuan3D-2.1 Simple Demo - macOS Edition")
 print("="*70)
+print(f"Quality Preset: {QUALITY_PRESET.upper()}")
+print(f"  Inference Steps: {settings['num_inference_steps']}")
+print(f"  Octree Resolution: {settings['octree_resolution']}")
+print(f"  Guidance Scale: {settings['guidance_scale']}")
+print(f"  Memory Chunks: {settings['num_chunks']}")
 print()
 
 # Check device
@@ -72,12 +147,36 @@ try:
     
     if os.path.exists(image_path):
         print(f"Processing image: {image_path}")
-        print(f"Generating 3D mesh on {device}... (this may take 1-2 minutes on MPS)")
+        
+        # Estimate time based on preset
+        time_estimates = {
+            'fast': '3-5 minutes',
+            'balanced': '7-10 minutes',
+            'quality': '12-15 minutes'
+        }
+        est_time = time_estimates.get(QUALITY_PRESET, '5-10 minutes')
+        print(f"Generating 3D mesh on {device}... (estimated: {est_time})")
         print()
         
-        # Generate
+        # Generate with custom settings
         image = Image.open(image_path)
-        mesh = pipeline(image=image)[0]
+        result = pipeline(
+            image=image,
+            num_inference_steps=settings['num_inference_steps'],
+            octree_resolution=settings['octree_resolution'],
+            guidance_scale=settings['guidance_scale'],
+            num_chunks=settings['num_chunks']
+        )
+        
+        # Check if generation was successful
+        if result is None or len(result) == 0 or result[0] is None:
+            print(f"❌ Mesh generation failed!")
+            print(f"   This usually means the inference steps were too low or settings were invalid.")
+            print(f"   Try increasing num_inference_steps to at least 20.")
+            import sys
+            sys.exit(1)
+        
+        mesh = result[0]
         
         # Save
         mesh.export(output_path)
