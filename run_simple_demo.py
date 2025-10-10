@@ -10,16 +10,16 @@ import os
 # ============================================================================
 # PERFORMANCE SETTINGS - Adjust these for speed vs quality tradeoff
 # ============================================================================
-# Preset options: 'fast', 'balanced', 'quality'
-QUALITY_PRESET = 'minimum'  # Change this to 'balanced' or 'quality' for better results
+# Preset options: 'test', 'minimum', 'fast', 'balanced', 'quality'
+QUALITY_PRESET = 'test'  # Change this to 'minimum', 'fast', 'balanced', or 'quality' for better results
 
 # Manual settings (uncomment to override preset):
-# num_inference_steps = 20      # Min: 15, Fast: 20, Balanced: 35, Quality: 50+
-# octree_resolution = 256       # Default: 384, Fast: 256, Quality: 512
-# guidance_scale = 3.0          # Default: 5.0, Fast: 3.0, Quality: 7.0
-# num_chunks = 4000             # Default: 8000, Fast: 4000, Quality: 16000
+# num_inference_steps = 20      # Test: 12 (risky!), Min: 15, Fast: 20, Balanced: 35, Quality: 50+
+# octree_resolution = 256       # Test: 96, Min: 192, Fast: 256, Balanced: 320, Quality: 384
+# guidance_scale = 3.0          # Test: 1.5, Min: 2.0, Fast: 3.0, Balanced: 4.0, Quality: 5.0
+# num_chunks = 4000             # Test: 1500, Min: 3000, Fast: 4000, Balanced: 6000, Quality: 8000
 #
-# WARNING: num_inference_steps below 15 will likely fail!
+# WARNING: 'test' preset is experimental - may fail or produce garbage!
 # ============================================================================
 
 # Enable MPS fallback for unsupported operations (must be set before importing torch)
@@ -38,6 +38,12 @@ from PIL import Image
 
 # Define quality presets
 PRESETS = {
+    'test': {
+        'num_inference_steps': 12,      # RISKY - might fail, ultra fast testing
+        'octree_resolution': 96,        # Very blocky/low-poly
+        'guidance_scale': 1.5,          # Loose interpretation
+        'num_chunks': 1500,             # Minimal chunks (might fail)
+    },
     'minimum': {
         'num_inference_steps': 15,      # Minimum steps
         'octree_resolution': 192,       # Lower resolution mesh
@@ -82,14 +88,18 @@ if 'num_chunks' in dir():
     settings['num_chunks'] = num_chunks
 
 # Validate settings
-MIN_STEPS = 15
+MIN_STEPS = 10  # Allow test preset with 12 steps
 if settings['num_inference_steps'] < MIN_STEPS:
     print(f"❌ ERROR: num_inference_steps ({settings['num_inference_steps']}) is too low!")
-    print(f"   Minimum recommended: {MIN_STEPS} steps")
+    print(f"   Minimum: {MIN_STEPS} steps")
     print(f"   The model will likely fail to generate a valid mesh.")
     print()
     import sys
     sys.exit(1)
+elif settings['num_inference_steps'] < 15 and QUALITY_PRESET != 'test':
+    print(f"⚠️  WARNING: Using {settings['num_inference_steps']} steps is risky!")
+    print(f"   Results may be poor quality or fail completely.")
+    print()
 
 print("="*70)
 print("Hunyuan3D-2.1 Simple Demo - macOS Edition")
@@ -150,11 +160,13 @@ try:
         
         # Estimate time based on preset
         time_estimates = {
-            'fast': '3-5 minutes',
-            'balanced': '7-10 minutes',
-            'quality': '12-15 minutes'
+            'test': '5-7 minutes (EXPERIMENTAL - may fail!)',
+            'minimum': '7-9 minutes',
+            'fast': '9-11 minutes',
+            'balanced': '13-16 minutes',
+            'quality': '18-22 minutes'
         }
-        est_time = time_estimates.get(QUALITY_PRESET, '5-10 minutes')
+        est_time = time_estimates.get(QUALITY_PRESET, '10-15 minutes')
         print(f"Generating 3D mesh on {device}... (estimated: {est_time})")
         print()
         
