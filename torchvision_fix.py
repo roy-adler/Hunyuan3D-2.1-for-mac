@@ -94,10 +94,58 @@ def fix_torchvision_functional_tensor():
             print(f"Failed to create functional_tensor mock: {e}")
             return False
 
+def fix_mps_antialias():
+    """
+    Fix MPS antialias issue by patching torchvision transforms
+    The antialiasing operator is not implemented for MPS, so we disable it
+    """
+    import torch
+    import torchvision.transforms.functional as F
+    
+    # Only apply fix if MPS is available
+    if not torch.backends.mps.is_available():
+        return
+    
+    print("Applying MPS antialias fix for torchvision...")
+    
+    # Store original resize function
+    original_resize = F.resize
+    
+    def mps_safe_resize(img, size, interpolation=F.InterpolationMode.BILINEAR, max_size=None, antialias=None):
+        """Wrapper that disables antialias on MPS devices"""
+        # If image is on MPS device or will be moved to MPS, disable antialias
+        if isinstance(img, torch.Tensor) and (img.device.type == 'mps' or torch.backends.mps.is_available()):
+            antialias = False  # Disable antialias for MPS
+        return original_resize(img, size, interpolation, max_size, antialias)
+    
+    # Monkey patch the resize function
+    torchvision.transforms.functional.resize = mps_safe_resize
+    F.resize = mps_safe_resize
+    
+    # Also patch the Resize transform class
+    from torchvision.transforms import Resize
+    original_resize_forward = Resize.forward
+    
+    def mps_safe_resize_forward(self, img):
+        """Wrapper for Resize.forward that disables antialias on MPS"""
+        if isinstance(img, torch.Tensor) and (img.device.type == 'mps' or torch.backends.mps.is_available()):
+            # Temporarily disable antialias
+            old_antialias = getattr(self, 'antialias', None)
+            self.antialias = False
+            result = original_resize_forward(self, img)
+            self.antialias = old_antialias
+            return result
+        return original_resize_forward(self, img)
+    
+    Resize.forward = mps_safe_resize_forward
+    print("✅ MPS antialias fix applied")
+
 def apply_fix():
-    """Apply the torchvision compatibility fix"""
+    """Apply all torchvision compatibility fixes"""
     print(f"Torchvision version: {torchvision.__version__}")
-    return fix_torchvision_functional_tensor()
+    fix_torchvision_functional_tensor()
+    fix_mps_antialias()
+    return True
 
 if __name__ == "__main__":
     apply_fix() 
