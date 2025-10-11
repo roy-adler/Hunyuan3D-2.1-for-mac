@@ -4,10 +4,22 @@
 #include <torch/extension.h>
 #include <vector>
 #include <ATen/ATen.h>
+
+// Only include CUDA headers if CUDA is available
+#if defined(USE_CUDA) && USE_CUDA
 #include <ATen/cuda/CUDAContext.h> // For CUDA context
+#endif
 
 #define INT64 unsigned long long
 #define MAXINT 2147483647
+
+// Define host/device decorators for CPU-only builds
+#ifndef __host__
+#define __host__
+#endif
+#ifndef __device__
+#define __device__
+#endif
 
 __host__ __device__ inline float calculateSignedArea2(float* a, float* b, float* c) {
     return ((c[0] - a[0]) * (b[1] - a[1]) - (b[0] - a[0]) * (c[1] - a[1]));
@@ -40,8 +52,15 @@ __host__ __device__  inline bool isBarycentricCoordInBounds(float* barycentricCo
            barycentricCoord[2] >= 0.0 && barycentricCoord[2] <= 1.0;
 }
 
+// CPU rasterization (always available)
+std::vector<torch::Tensor> rasterize_image_cpu(torch::Tensor V, torch::Tensor F, torch::Tensor D,
+    int width, int height, float occlusion_truncation, int use_depth_prior);
+
+// GPU rasterization (only with CUDA)
+#if defined(USE_CUDA) && USE_CUDA
 std::vector<torch::Tensor> rasterize_image_gpu(torch::Tensor V, torch::Tensor F, torch::Tensor D,
     int width, int height, float occlusion_truncation, int use_depth_prior);
+#endif
 
 std::vector<std::vector<torch::Tensor>> build_hierarchy(std::vector<torch::Tensor> view_layer_positions, std::vector<torch::Tensor> view_layer_normals, int num_level, int resolution);
 

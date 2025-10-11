@@ -32,6 +32,21 @@ def mesh_simplify_trimesh(inputpath, outputpath, target_count=40000):
     courent = trimesh.load(outputpath.replace(".glb", ".obj"), force="mesh")
     face_num = courent.faces.shape[0]
 
-    if face_num > target_count:
-        courent = courent.simplify_quadric_decimation(target_count)
+    print(f"Mesh simplification: Current faces={face_num}, Target={target_count}")
+    
+    # Only simplify if we have significantly more faces than target
+    if face_num > target_count * 1.5:
+        # Ensure target_count is valid (at least 4 faces, max 90% of original)
+        safe_target = max(4, min(target_count, int(face_num * 0.9)))
+        print(f"Simplifying mesh from {face_num} to {safe_target} faces...")
+        try:
+            courent = courent.simplify_quadric_decimation(safe_target)
+            actual_faces = courent.faces.shape[0]
+            print(f"✅ Mesh simplified to {actual_faces} faces")
+        except Exception as e:
+            print(f"⚠️  Simplification failed: {e}")
+            print(f"   Using original mesh with {face_num} faces")
+    else:
+        print(f"Mesh face count ({face_num}) is reasonable, skipping simplification")
+    
     courent.export(outputpath)

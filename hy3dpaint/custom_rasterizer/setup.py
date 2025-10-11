@@ -14,18 +14,64 @@
 
 from setuptools import setup, find_packages
 import torch
+import sys
 from torch.utils.cpp_extension import BuildExtension, CUDAExtension, CppExtension
 
 # build custom rasterizer
 
-custom_rasterizer_module = CUDAExtension(
-    "custom_rasterizer_kernel",
-    [
-        "lib/custom_rasterizer_kernel/rasterizer.cpp",
-        "lib/custom_rasterizer_kernel/grid_neighbor.cpp",
-        "lib/custom_rasterizer_kernel/rasterizer_gpu.cu",
-    ],
-)
+# Check if CUDA is available
+# On macOS, we use CPU-only version (no CUDA support)
+if torch.cuda.is_available() and sys.platform != 'darwin':
+    print("Building custom rasterizer with CUDA support...")
+    custom_rasterizer_module = CUDAExtension(
+        "custom_rasterizer_kernel",
+        [
+            "lib/custom_rasterizer_kernel/rasterizer.cpp",
+            "lib/custom_rasterizer_kernel/grid_neighbor.cpp",
+            "lib/custom_rasterizer_kernel/rasterizer_gpu.cu",
+        ],
+    )
+else:
+    print("Building custom rasterizer with CPU-only support (no CUDA)...")
+    
+    import os
+    torch_dir = os.path.dirname(torch.__file__)
+    
+    # Get default include dirs but filter out CUDA-related ones
+    include_dirs = []
+    torch_include = os.path.join(torch_dir, 'include')
+    
+    # Only include non-CUDA torch headers
+    include_dirs.append(torch_include)
+    include_dirs.append(os.path.join(torch_include, 'torch/csrc/api/include'))
+    include_dirs.append(os.path.join(torch_include, 'TH'))
+    # Explicitly DO NOT include THC (Torch CUDA)
+    
+    # Add PyTorch library directory to rpath
+    torch_lib_dir = os.path.join(torch_dir, 'lib')
+    
+    custom_rasterizer_module = CppExtension(
+        "custom_rasterizer_kernel",
+        [
+            "lib/custom_rasterizer_kernel/rasterizer.cpp",
+            "lib/custom_rasterizer_kernel/grid_neighbor.cpp",
+        ],
+        include_dirs=include_dirs,
+        library_dirs=[torch_lib_dir],
+        extra_compile_args={
+            'cxx': [
+                '-std=c++17',
+                '-DUSE_CUDA=0',
+                '-D__NO_CUDA__',
+                '-DAT_PER_OPERATOR_HEADERS',
+                '-DCPU_ONLY',
+                '-Wno-c++11-narrowing',  # Allow implicit type conversions
+                '-Wno-sign-compare'       # Suppress signed/unsigned comparison warnings
+            ] if sys.platform == 'darwin' else ['-std=c++17', '-DUSE_CUDA=0'],
+        },
+        extra_link_args=[f'-Wl,-rpath,{torch_lib_dir}'] if sys.platform == 'darwin' else [],
+        undef_macros=['USE_CUDA']
+    )
 
 setup(
     packages=find_packages(),
