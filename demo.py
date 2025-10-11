@@ -61,67 +61,88 @@ import torch
 from hy3dshape.pipelines import Hunyuan3DDiTFlowMatchingPipeline
 from PIL import Image
 
-# Define quality presets
+# Define quality presets with device-specific optimizations
 PRESETS = {
     'test': {
-        'num_inference_steps': 12,
-        'octree_resolution': 96,
-        'guidance_scale': 1.5,
-        'num_chunks': 1500,
+        'gpu': {  # MPS/CUDA
+            'num_inference_steps': 12,
+            'octree_resolution': 96,
+            'guidance_scale': 1.5,
+            'num_chunks': 1500,
+        },
+        'cpu': {  # CPU optimized (lower resolution for speed)
+            'num_inference_steps': 10,
+            'octree_resolution': 64,
+            'guidance_scale': 1.5,
+            'num_chunks': 1000,
+        }
     },
     'minimum': {
-        'num_inference_steps': 15,
-        'octree_resolution': 192,
-        'guidance_scale': 2.0,
-        'num_chunks': 3000,
+        'gpu': {
+            'num_inference_steps': 15,
+            'octree_resolution': 192,
+            'guidance_scale': 2.0,
+            'num_chunks': 3000,
+        },
+        'cpu': {
+            'num_inference_steps': 12,
+            'octree_resolution': 128,
+            'guidance_scale': 2.0,
+            'num_chunks': 2000,
+        }
     },
     'fast': {
-        'num_inference_steps': 20,
-        'octree_resolution': 256,
-        'guidance_scale': 3.0,
-        'num_chunks': 4000,
+        'gpu': {
+            'num_inference_steps': 20,
+            'octree_resolution': 256,
+            'guidance_scale': 3.0,
+            'num_chunks': 4000,
+        },
+        'cpu': {
+            'num_inference_steps': 15,
+            'octree_resolution': 192,
+            'guidance_scale': 3.0,
+            'num_chunks': 3000,
+        }
     },
     'balanced': {
-        'num_inference_steps': 35,
-        'octree_resolution': 320,
-        'guidance_scale': 4.0,
-        'num_chunks': 6000,
+        'gpu': {
+            'num_inference_steps': 35,
+            'octree_resolution': 320,
+            'guidance_scale': 4.0,
+            'num_chunks': 6000,
+        },
+        'cpu': {
+            'num_inference_steps': 25,
+            'octree_resolution': 256,
+            'guidance_scale': 4.0,
+            'num_chunks': 4000,
+        }
     },
     'quality': {
-        'num_inference_steps': 50,
-        'octree_resolution': 384,
-        'guidance_scale': 5.0,
-        'num_chunks': 8000,
+        'gpu': {
+            'num_inference_steps': 50,
+            'octree_resolution': 384,
+            'guidance_scale': 5.0,
+            'num_chunks': 8000,
+        },
+        'cpu': {
+            'num_inference_steps': 35,
+            'octree_resolution': 320,
+            'guidance_scale': 5.0,
+            'num_chunks': 6000,
+        }
     }
 }
-
-# Apply preset
-settings = PRESETS[args.quality]
-
-# Override with manual settings if provided
-if args.steps is not None:
-    settings['num_inference_steps'] = args.steps
-if args.resolution is not None:
-    settings['octree_resolution'] = args.resolution
-if args.guidance is not None:
-    settings['guidance_scale'] = args.guidance
-if args.chunks is not None:
-    settings['num_chunks'] = args.chunks
 
 print("="*70)
 print("Hunyuan3D-2.1 Demo - macOS Edition")
 print("="*70)
 print(f"Input image: {args.image}")
 print(f"Output mesh: {args.output}")
+print(f"Requested device: {args.device}")
 print(f"Texture generation: {'ENABLED' if args.texture else 'DISABLED'}")
 print(f"Quality preset: {args.quality.upper()}")
-print(f"  Inference steps: {settings['num_inference_steps']}")
-print(f"  Octree resolution: {settings['octree_resolution']}")
-print(f"  Guidance scale: {settings['guidance_scale']}")
-print(f"  Memory chunks: {settings['num_chunks']}")
-if args.texture:
-    print(f"  Texture views: {args.texture_views}")
-    print(f"  Texture resolution: {args.texture_resolution}")
 print()
 
 # Check device
@@ -156,6 +177,40 @@ else:
         print(f"✅ Using device: {device_names.get(args.device, args.device)} [user-specified]")
 
 print(f"PyTorch version: {torch.__version__}")
+print()
+
+# Apply device-specific preset
+device_category = 'cpu' if device.type == 'cpu' else 'gpu'
+settings = PRESETS[args.quality][device_category]
+
+# Override with manual settings if provided
+if args.steps is not None:
+    settings['num_inference_steps'] = args.steps
+if args.resolution is not None:
+    settings['octree_resolution'] = args.resolution
+if args.guidance is not None:
+    settings['guidance_scale'] = args.guidance
+if args.chunks is not None:
+    settings['num_chunks'] = args.chunks
+
+# Display settings
+print(f"Settings (optimized for {device_category.upper()}):")
+print(f"  Inference steps: {settings['num_inference_steps']}")
+print(f"  Octree resolution: {settings['octree_resolution']}")
+print(f"  Guidance scale: {settings['guidance_scale']}")
+print(f"  Memory chunks: {settings['num_chunks']}")
+if args.texture:
+    print(f"  Texture views: {args.texture_views}")
+    print(f"  Texture resolution: {args.texture_resolution}")
+
+if device.type == 'cpu':
+    print()
+    print("⚠️  WARNING: Running on CPU")
+    print("   CPU inference is 10-50x slower than GPU/MPS.")
+    print("   Expected generation time: 1-3 hours depending on quality preset.")
+    print("   CPU-optimized settings have been applied (lower resolution).")
+    print("   For faster results, consider using --device mps (Apple Silicon) or --device cuda (NVIDIA GPU)")
+
 print()
 
 try:
