@@ -36,6 +36,9 @@ parser.add_argument('--texture-views', type=int, default=8,
                     help='Number of views for texture generation (default: 8)')
 parser.add_argument('--texture-resolution', type=int, default=768,
                     help='Texture resolution (default: 768)')
+parser.add_argument('--device', type=str, default='auto',
+                    choices=['auto', 'cpu', 'cuda', 'mps'],
+                    help='Device to use: auto (default), cpu, cuda, or mps')
 
 parser.set_defaults(texture=False)
 args = parser.parse_args()
@@ -122,15 +125,35 @@ if args.texture:
 print()
 
 # Check device
-if torch.backends.mps.is_available():
-    device = torch.device("mps")
-    print(f"✅ Using device: MPS (Apple Silicon GPU)")
-elif torch.cuda.is_available():
-    device = torch.device("cuda")
-    print(f"✅ Using device: CUDA")
+if args.device == 'auto':
+    # Auto-detect best available device
+    if torch.backends.mps.is_available():
+        device = torch.device("mps")
+        print(f"✅ Using device: MPS (Apple Silicon GPU) [auto-detected]")
+    elif torch.cuda.is_available():
+        device = torch.device("cuda")
+        print(f"✅ Using device: CUDA [auto-detected]")
+    else:
+        device = torch.device("cpu")
+        print(f"⚠️  Using device: CPU (no GPU available) [auto-detected]")
 else:
-    device = torch.device("cpu")
-    print(f"⚠️  Using device: CPU (no GPU available)")
+    # Use user-specified device
+    device = torch.device(args.device)
+    
+    # Validate the requested device is available
+    if args.device == 'mps' and not torch.backends.mps.is_available():
+        print(f"⚠️  WARNING: MPS requested but not available, falling back to CPU")
+        device = torch.device("cpu")
+    elif args.device == 'cuda' and not torch.cuda.is_available():
+        print(f"⚠️  WARNING: CUDA requested but not available, falling back to CPU")
+        device = torch.device("cpu")
+    else:
+        device_names = {
+            'cpu': 'CPU',
+            'cuda': 'CUDA (NVIDIA GPU)',
+            'mps': 'MPS (Apple Silicon GPU)'
+        }
+        print(f"✅ Using device: {device_names.get(args.device, args.device)} [user-specified]")
 
 print(f"PyTorch version: {torch.__version__}")
 print()
@@ -245,7 +268,10 @@ try:
         conf.multiview_cfg_path = "hy3dpaint/cfgs/hunyuan-paint-pbr.yaml"
         conf.custom_pipeline = "hy3dpaint/hunyuanpaintpbr"
         
-        print(f"Detected device for texture generation: {conf.device}")
+        # Override device to match the shape pipeline device
+        conf.device = device.type
+        
+        print(f"Using device for texture generation: {conf.device}")
         print()
         
         tex_pipeline = Hunyuan3DPaintPipeline(conf)
