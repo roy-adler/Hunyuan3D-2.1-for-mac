@@ -34,17 +34,25 @@ class multiviewDiffusionNet:
         self.cfg = cfg
         self.mode = self.cfg.model.params.stable_diffusion_config.custom_pipeline[2:]
 
+        print(f"Downloading texture generation model weights from {config.multiview_pretrained_path}...")
         model_path = huggingface_hub.snapshot_download(
             repo_id=config.multiview_pretrained_path,
             allow_patterns=["hunyuan3d-paintpbr-v2-1/*"],
+            resume_download=True,
         )
+        print("✅ Model weights downloaded")
 
         model_path = os.path.join(model_path, "hunyuan3d-paintpbr-v2-1")
+        # Use float32 for MPS (better compatibility), float16 for CUDA
+        dtype = torch.float32 if self.device == "mps" else torch.float16
+        print("Loading diffusion pipeline components...")
         pipeline = DiffusionPipeline.from_pretrained(
             model_path,
             custom_pipeline=custom_pipeline, 
-            torch_dtype=torch.float16
+            torch_dtype=dtype,
+            resume_download=True
         )
+        print("✅ Diffusion pipeline loaded")
 
         pipeline.scheduler = UniPCMultistepScheduler.from_config(pipeline.scheduler.config, timestep_spacing="trailing")
         pipeline.set_progress_bar_config(disable=True)
@@ -53,9 +61,11 @@ class multiviewDiffusionNet:
         self.pipeline = pipeline.to(self.device)
 
         if hasattr(self.pipeline.unet, "use_dino") and self.pipeline.unet.use_dino:
+            print("\nLoading DINOv2 vision model (this is the large download)...")
             from hunyuanpaintpbr.unet.modules import Dino_v2
-            self.dino_v2 = Dino_v2(config.dino_ckpt_path).to(torch.float16)
+            self.dino_v2 = Dino_v2(config.dino_ckpt_path).to(dtype)
             self.dino_v2 = self.dino_v2.to(self.device)
+            print(f"✅ DINOv2 moved to {self.device}")
 
     def seed_everything(self, seed):
         random.seed(seed)

@@ -334,7 +334,7 @@ class MeshRender:
         raster_mode="cr",
         shader_type="face",
         use_opengl=False,
-        device="cuda",
+        device=None,
     ):
         """
         Initialize mesh renderer with configurable parameters.
@@ -351,9 +351,18 @@ class MeshRender:
             raster_mode: Rasterization backend ("cr" for custom rasterizer)
             shader_type: Shading type ("face" or "vertex")
             use_opengl: Whether to use OpenGL backend (deprecated)
-            device: Computing device ("cuda" or "cpu")
+            device: Computing device ("cuda", "mps", "cpu", or None for auto-detect)
         """
 
+        # Auto-detect device if not specified
+        if device is None:
+            if torch.cuda.is_available():
+                device = "cuda"
+            elif torch.backends.mps.is_available():
+                device = "mps"
+            else:
+                device = "cpu"
+        
         self.device = device
 
         self.set_default_render_resolution(default_resolution)

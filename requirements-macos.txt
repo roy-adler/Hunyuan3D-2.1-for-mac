@@ -36,6 +36,7 @@ pygltflib==1.16.3
 # Note: xatlas 0.0.11 has pre-built wheels for M1 Macs
 xatlas>=0.0.11
 open3d==0.18.0
+fast-simplification==0.1.12  # For texture generation mesh remeshing
 
 # Configuration Management
 omegaconf==2.3.0
