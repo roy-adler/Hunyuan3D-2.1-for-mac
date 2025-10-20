@@ -18,9 +18,34 @@ import torch
 
 def rasterize(pos, tri, resolution, clamp_depth=torch.zeros(0), use_depth_prior=0):
     assert pos.device == tri.device
+    
+    # Save original device and move tensors to CPU for rasterization
+    # (CPU-only rasterizer for macOS compatibility)
+    original_device = pos.device
+    needs_transfer = original_device.type != 'cpu'
+    
+    if needs_transfer:
+        pos = pos.cpu()
+        tri = tri.cpu()
+        if clamp_depth.numel() > 0:
+            clamp_depth = clamp_depth.cpu()
+    
+    # Ensure correct data types (float32 for pos, int32 for tri)
+    if pos.dtype != torch.float32:
+        pos = pos.float()
+    if tri.dtype != torch.int32:
+        tri = tri.int()
+    
+    # Rasterize on CPU
     findices, barycentric = custom_rasterizer_kernel.rasterize_image(
         pos[0], tri, clamp_depth, resolution[1], resolution[0], 1e-6, use_depth_prior
     )
+    
+    # Move results back to original device if needed
+    if needs_transfer:
+        findices = findices.to(original_device)
+        barycentric = barycentric.to(original_device)
+    
     return findices, barycentric
 
 
